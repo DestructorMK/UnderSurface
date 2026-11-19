@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Undersurface">
+<meta name="theme-color" content="#F7F7F5">
+<title>Undersurface</title>
+<style>/*CSS*/</style>
+</head>
+<body>
+<canvas id="stage" aria-label="Camera view with x-ray lens"></canvas>
+<video id="cam" playsinline muted autoplay style="display:none"></video>
+
+<section id="home" class="screen on"><div class="home-wrap">
+  <div class="caps">Prototype 0.1 · NC State</div>
+  <h1 class="wordmark" style="margin-top:12px">Undersurface</h1>
+  <p class="tagline">Point your camera at a wall, carpet or floor and see the ecosystem living inside it.</p>
+  <div class="home-actions"><button class="btn primary" id="bScan">Scan a surface</button><button class="btn" id="bSample">Use a sample surface</button></div>
+  <div class="section-h"><span class="caps" style="color:var(--ink)">Your sites</span><span class="caps" id="siteCount"></span></div>
+  <div class="rows" id="sites"></div>
+  <div class="section-h"><span class="caps" style="color:var(--ink)">Case files</span></div>
+  <div class="rows" id="cases"></div>
+  <div class="foot"><button class="link" id="bGuide">Field guide</button><button class="link" id="bLog">Research log</button><span id="logCount" class="num"></span><button class="link" id="bDev">Dev: skip 1 day</button><button class="link" id="bReset">Reset</button></div>
+</div></section>
+
+<section id="scan" class="screen">
+  <div class="topbar"><div class="in"><button class="back" id="sBack">Back</button><div class="title"><b>Scan a surface</b><span>Hold 20–40 cm away and fill the frame</span></div></div></div>
+  <div class="hint">One surface inside the corners, then tap scan</div>
+  <div class="scanbar"><button class="shutter" id="bShutter" aria-label="Scan surface"><i></i></button></div>
+</section>
+
+<section id="xray" class="screen">
+  <div class="topbar"><div class="in"><button class="back" id="xBack">Sites</button><div class="title"><b id="xName"></b><span id="xSub" class="num"></span></div><button class="btn quiet" id="bCase">Case</button><button class="btn quiet" id="bXGuide"><span class="hide-sm">Field guide</span><span class="sm-only">Guide</span></button></div></div>
+  <div class="rail" id="rail"></div>
+  <div class="panel">
+    <div class="tabs"><button data-tab="measure">Measure</button><button data-tab="act">Act</button><button data-tab="time">Time</button></div>
+    <div class="pane" id="p-measure">
+      <div class="tools"><button class="btn" data-m="rh">Humidity</button><button class="btn" data-m="temp">Temperature</button><button class="btn" data-m="count">Count organisms</button><button class="btn quiet" id="bGraph">Graph</button></div>
+      <div class="readout" id="readout"></div>
+    </div>
+    <div class="pane" id="p-act"><div class="tools" id="acts"></div><div class="readout" id="actNote"></div></div>
+    <div class="pane" id="p-time">
+      <div class="timeline"><span class="caps">Start</span><input type="range" id="scrub" min="0" step="1" aria-label="Time"><span class="caps" id="maxL"></span></div>
+      <div class="ticks" id="ticks"></div>
+      <div class="timeinfo"><span id="timeLabel" class="num"></span><span class="tools"><button class="btn quiet" id="bNow">Back to today</button><button class="btn" id="bCommit">Skip ahead to here</button></span></div>
+    </div>
+  </div>
+</section>
+
+<section id="guide" class="screen" style="overflow-y:auto">
+  <div class="topbar" style="position:sticky"><div class="in"><button class="back" id="gBack">Back</button><div class="title"><b>Field guide</b><span id="gSub"></span></div></div></div>
+  <div style="max-width:960px;margin:0 auto;padding:24px 16px calc(32px + var(--safe-b))"><div class="grid" id="ggrid"></div></div>
+</section>
+
+<div class="scrim" id="scrim"><div class="sheet" id="sheet" role="dialog"></div></div>
+<div id="toast" role="status"></div>
+<script>/*JS*/</script>
+</body>
+</html>
