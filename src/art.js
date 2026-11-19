@@ -127,113 +127,131 @@ function thumb(id, locked) {
   return (_thumbs[key] = c.toDataURL());
 }
 
-// ---------- cutaway backgrounds (diameter D) ----------
-function cutaway(biome, tier, D, base, seed) {
-  const c = document.createElement('canvas'); c.width = c.height = D; const x = c.getContext('2d'); const r = rng(seed + tier * 101);
-  const B = base;
-  if (biome === 'carpet') {
-    if (tier === 1) {
-      x.fillStyle = rgbStr(shade(B, -0.45)); x.fillRect(0, 0, D, D);
-      for (let i = 0; i < 520; i++) {
-        const px = r() * D, py = r() * D, len = D * (0.05 + r() * 0.06), a = -Math.PI / 2 + (r() - 0.5) * 0.9;
-        x.strokeStyle = rgbStr(shade(B, (r() - 0.5) * 0.35)); x.lineWidth = D / 140 + r() * D / 260; x.lineCap = 'round';
-        x.beginPath(); x.moveTo(px, py); x.quadraticCurveTo(px + Math.cos(a + 0.6) * len * 0.5, py + Math.sin(a + 0.6) * len * 0.5, px + Math.cos(a) * len, py + Math.sin(a) * len); x.stroke();
-      }
-      for (let i = 0; i < 60; i++) { x.fillStyle = 'rgba(240,232,216,0.8)'; x.fillRect(r() * D, r() * D, 1.5 + r() * 2, 1.5 + r() * 2); }
-    } else if (tier === 2) {
-      x.fillStyle = rgbStr(shade(B, -0.55)); x.fillRect(0, 0, D, D);
-      for (let i = 0; i < 9; i++) {
-        const y0 = r() * D, y1 = r() * D, w = D * (0.07 + r() * 0.05), col = shade(B, (r() - 0.5) * 0.3);
-        x.lineCap = 'round'; x.strokeStyle = rgbStr(col); x.lineWidth = w;
-        x.beginPath(); x.moveTo(-w, y0); x.bezierCurveTo(D * 0.3, y0 + (r() - 0.5) * D * 0.5, D * 0.7, y1 + (r() - 0.5) * D * 0.5, D + w, y1); x.stroke();
-        x.strokeStyle = rgbStr(shade(col, 0.18)); x.lineWidth = w * 0.22;
-        x.beginPath(); x.moveTo(-w, y0 - w * 0.2); x.bezierCurveTo(D * 0.3, y0 + (r() - 0.5) * 2, D * 0.7, y1, D + w, y1 - w * 0.2); x.stroke();
-      }
-      for (let i = 0; i < 22; i++) {
-        const cx = r() * D, cy = r() * D, rr = D * (0.015 + r() * 0.03); x.fillStyle = '#EFE7D6'; x.beginPath();
-        for (let j = 0; j < 7; j++) { const a = j / 7 * Math.PI * 2, q = rr * (0.6 + r() * 0.6); j ? x.lineTo(cx + Math.cos(a) * q, cy + Math.sin(a) * q) : x.moveTo(cx + Math.cos(a) * q, cy + Math.sin(a) * q); }
-        x.closePath(); x.fill();
-      }
-    } else {
-      x.fillStyle = rgbStr(shade(B, 0.25)); x.fillRect(0, 0, D, D);
-      x.strokeStyle = rgbStr(shade(B, -0.08)); x.lineWidth = Math.max(1, D / 300);
-      const sc = D / 9; for (let row = -1; row < 12; row++) for (let col = -1; col < 11; col++) { const cx = col * sc + (row % 2) * sc / 2, cy = row * sc * 0.8; x.beginPath(); x.arc(cx, cy, sc * 0.55, 0.15 * Math.PI, 0.85 * Math.PI); x.stroke(); }
-    }
-  } else if (biome === 'wall') {
-    if (tier === 1) {
-      x.fillStyle = '#ECEAE4'; x.fillRect(0, 0, D, D);
-      for (let i = 0; i < 900; i++) { x.fillStyle = r() < 0.5 ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.5)'; x.fillRect(r() * D, D * 0.18 + r() * D * 0.42, 1 + r() * 2, 1 + r() * 2); }
-      x.fillStyle = rgbStr(B); x.fillRect(0, 0, D, D * 0.12);
-      x.fillStyle = '#DDD3BC'; x.fillRect(0, D * 0.12, D, D * 0.04);
-      x.fillStyle = '#DDD3BC'; x.fillRect(0, D * 0.6, D, D * 0.03);
-      x.fillStyle = '#2F2C29'; x.fillRect(0, D * 0.63, D, D * 0.37);
-      x.fillStyle = '#8A6A47'; x.fillRect(D * 0.72, D * 0.63, D * 0.14, D * 0.37);
-      x.strokeStyle = '#6E5236'; x.lineWidth = 1; for (let i = 0; i < 6; i++) { x.beginPath(); x.moveTo(D * 0.74 + i * D * 0.02, D * 0.63); x.lineTo(D * 0.75 + i * D * 0.02, D); x.stroke(); }
-      x.strokeStyle = 'rgba(255,255,255,0.12)'; for (let i = 0; i < 4; i++) { const yy = D * (0.68 + r() * 0.3); x.beginPath(); x.moveTo(0, yy); x.lineTo(D * 0.72, yy + (r() - 0.5) * 20); x.stroke(); }
-    } else if (tier === 2) {
-      x.fillStyle = '#E4E1D9'; x.fillRect(0, 0, D, D);
-      for (let i = 0; i < 260; i++) {
-        const cx = r() * D, cy = r() * D, L = D * (0.04 + r() * 0.08), a = r() * Math.PI;
-        x.save(); x.translate(cx, cy); x.rotate(a); x.fillStyle = r() < 0.5 ? '#F4F2EC' : '#D2CEC4'; x.fillRect(-L / 2, -L * 0.07, L, L * 0.14); x.restore();
-      }
-    } else {
-      x.fillStyle = '#E9E1CF'; x.fillRect(0, 0, D, D);
-      for (let i = 0; i < 26; i++) {
-        const y0 = r() * D, a = (r() - 0.5) * 1.4; x.save(); x.translate(D / 2, y0); x.rotate(a);
-        x.fillStyle = r() < 0.5 ? '#F3ECDD' : '#D9CDB2'; x.fillRect(-D, -D * 0.025, D * 2, D * 0.05);
-        x.strokeStyle = 'rgba(120,100,70,0.25)'; x.lineWidth = 1; x.beginPath(); x.moveTo(-D, 0); x.lineTo(D, 0); x.stroke(); x.restore();
-      }
-    }
-  } else {
-    if (tier === 1) {
-      const ph = D / 4.2; x.fillStyle = rgbStr(B); x.fillRect(0, 0, D, D);
-      for (let p = 0; p < 6; p++) {
-        const y0 = p * ph - ph * 0.3, col = shade(B, (r() - 0.5) * 0.22);
-        x.fillStyle = rgbStr(col); x.fillRect(0, y0, D, ph);
-        x.strokeStyle = rgbStr(shade(col, -0.22), 0.55); x.lineWidth = Math.max(1, D / 360);
-        for (let g = 0; g < 14; g++) { const yy = y0 + r() * ph, amp = 2 + r() * 6, ph2 = r() * 6; x.beginPath(); for (let xx = 0; xx <= D; xx += 8) { const v = yy + Math.sin(xx / (40 + g * 3) + ph2) * amp; xx ? x.lineTo(xx, v) : x.moveTo(xx, v); } x.stroke(); }
-        x.fillStyle = '#3B2716'; x.fillRect(0, y0 + ph - D * 0.008, D, D * 0.016);
-        for (let d = 0; d < 14; d++) { x.fillStyle = 'rgba(230,220,200,0.7)'; x.fillRect(r() * D, y0 + ph - D * 0.006, 2, 2); }
-      }
-    } else if (tier === 2) {
-      x.fillStyle = rgbStr(shade(B, -0.35)); x.fillRect(0, 0, D, D);
-      const cw = D / 7, chh = D / 16;
-      for (let row = 0; row < 18; row++) for (let col = -1; col < 9; col++) {
-        const cx = col * cw + (row % 2) * cw / 2 + (r() - 0.5) * 6, cy = row * chh;
-        x.fillStyle = rgbStr(shade(B, 0.15 + (r() - 0.5) * 0.1)); x.beginPath(); x.roundRect(cx + 3, cy + 2, cw - 6, chh - 4, 4); x.fill();
-      }
-    } else {
-      x.fillStyle = rgbStr(shade(B, -0.3)); x.fillRect(0, 0, D, D);
-      const cw = D / 2.4, chh = D / 3.2;
-      for (let row = 0; row < 4; row++) for (let col = -1; col < 4; col++) {
-        const cx = col * cw + (row % 2) * cw / 2, cy = row * chh;
-        x.fillStyle = rgbStr(shade(B, 0.28)); x.beginPath(); x.roundRect(cx + 8, cy + 8, cw - 16, chh - 16, 12); x.fill();
-        x.fillStyle = rgbStr(shade(B, -0.05)); for (let p = 0; p < 6; p++) { x.beginPath(); x.arc(cx + 20 + r() * (cw - 40), cy + 20 + r() * (chh - 40), D * 0.012, 0, 7); x.fill(); }
-      }
-    }
-  }
+// ---------- seamless cutaway tiles (tile size T, world-anchored) ----------
+if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) { r = Math.min(r, w / 2, h / 2); this.moveTo(x + r, y); this.arcTo(x + w, y, x + w, y + h, r); this.arcTo(x + w, y + h, x, y + h, r); this.arcTo(x, y + h, x, y, r); this.arcTo(x, y, x + w, y, r); this.closePath(); };
+}
+function h01(a, b) { return hash((a * 73856093) ^ (b * 19349663)); }
+// base(x, T): drawn once and periodic by construction. shapes(x, T, r): drawn in a 3x3 wrap so edges join.
+function tile(T, scale, seed, base, shapes) {
+  const c = document.createElement('canvas'); c.width = c.height = Math.round(T * scale); const x = c.getContext('2d'); x.scale(scale, scale);
+  base(x, T);
+  if (shapes) for (const dx of [-T, 0, T]) for (const dy of [-T, 0, T]) { x.save(); x.translate(dx, dy); shapes(x, T, rng(seed)); x.restore(); }
   return c;
 }
+function blob(x, cx, cy, rr, r, col) { x.fillStyle = col; x.beginPath(); for (let j = 0; j < 7; j++) { const a = j / 7 * Math.PI * 2, q = rr * (0.6 + r() * 0.6); j ? x.lineTo(cx + Math.cos(a) * q, cy + Math.sin(a) * q) : x.moveTo(cx + Math.cos(a) * q, cy + Math.sin(a) * q); } x.closePath(); x.fill(); }
 
-// ---------- sample surfaces (used when no camera) ----------
+function cutaway(biome, tier, T, B, seed, scale = 1) {
+  const S = seed + tier * 101;
+  if (biome === 'carpet') {
+    if (tier === 1) return tile(T, scale, S, (x, T) => { x.fillStyle = rgbStr(shade(B, -0.45)); x.fillRect(0, 0, T, T); }, (x, T, r) => {
+      x.lineCap = 'round';
+      for (let i = 0; i < 900; i++) {
+        const px = r() * T, py = r() * T, len = T * (0.03 + r() * 0.035), a = -Math.PI / 2 + (r() - 0.5) * 0.9;
+        x.strokeStyle = rgbStr(shade(B, (r() - 0.5) * 0.35)); x.lineWidth = T / 230 + r() * T / 420;
+        x.beginPath(); x.moveTo(px, py); x.quadraticCurveTo(px + Math.cos(a + 0.6) * len * 0.5, py + Math.sin(a + 0.6) * len * 0.5, px + Math.cos(a) * len, py + Math.sin(a) * len); x.stroke();
+      }
+      for (let i = 0; i < 120; i++) { x.fillStyle = 'rgba(240,232,216,0.8)'; x.fillRect(r() * T, r() * T, 1.5 + r() * 2, 1.5 + r() * 2); }
+    });
+    if (tier === 2) return tile(T, scale, S, (x, T) => { x.fillStyle = rgbStr(shade(B, -0.55)); x.fillRect(0, 0, T, T); }, (x, T, r) => {
+      x.lineCap = 'round';
+      for (let i = 0; i < 12; i++) {
+        const y0 = r() * T, w = T * (0.04 + r() * 0.03), col = shade(B, (r() - 0.5) * 0.3), c1 = (r() - 0.5) * T * 0.6, c2 = (r() - 0.5) * T * 0.6;
+        x.strokeStyle = rgbStr(col); x.lineWidth = w;
+        x.beginPath(); x.moveTo(0, y0); x.bezierCurveTo(T * 0.33, y0 + c1, T * 0.66, y0 + c2, T, y0); x.stroke();
+        x.strokeStyle = rgbStr(shade(col, 0.18)); x.lineWidth = w * 0.22;
+        x.beginPath(); x.moveTo(0, y0 - w * 0.2); x.bezierCurveTo(T * 0.33, y0 + c1 - w * 0.2, T * 0.66, y0 + c2 - w * 0.2, T, y0 - w * 0.2); x.stroke();
+      }
+      for (let i = 0; i < 40; i++) blob(x, r() * T, r() * T, T * (0.01 + r() * 0.018), r, '#EFE7D6');
+    });
+    return tile(T, scale, S, (x, T) => {
+      x.fillStyle = rgbStr(shade(B, 0.25)); x.fillRect(0, 0, T, T);
+      x.strokeStyle = rgbStr(shade(B, -0.08)); x.lineWidth = Math.max(1, T / 400);
+      const sc = T / 12, rs = T / 16;
+      for (let row = -1; row <= 16; row++) for (let col = -1; col <= 12; col++) { const cx = col * sc + (((row % 2) + 2) % 2) * sc / 2, cy = row * rs; x.beginPath(); x.arc(cx, cy, sc * 0.55, 0.15 * Math.PI, 0.85 * Math.PI); x.stroke(); }
+    });
+  }
+  if (biome === 'wall') {
+    if (tier === 1) return tile(T, scale, S, (x, T) => {
+      x.fillStyle = '#ECEAE4'; x.fillRect(0, 0, T, T);
+      x.fillStyle = rgbStr(B); x.fillRect(0, 0, T, T * 0.1);
+      x.fillStyle = '#DDD3BC'; x.fillRect(0, T * 0.1, T, T * 0.03); x.fillRect(0, T * 0.55, T, T * 0.025);
+      x.fillStyle = '#2F2C29'; x.fillRect(0, T * 0.575, T, T * 0.425);
+      x.fillStyle = '#8A6A47'; x.fillRect(T * 0.62, T * 0.575, T * 0.1, T * 0.425);
+      x.strokeStyle = '#6E5236'; x.lineWidth = 1; for (let i = 0; i < 6; i++) { x.beginPath(); x.moveTo(T * 0.63 + i * T * 0.015, T * 0.575); x.lineTo(T * 0.635 + i * T * 0.015, T); x.stroke(); }
+    }, (x, T, r) => {
+      for (let i = 0; i < 1400; i++) { x.fillStyle = r() < 0.5 ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.5)'; x.fillRect(r() * T, T * 0.14 + r() * T * 0.4, 1 + r() * 2, 1 + r() * 2); }
+      for (let i = 0; i < 30; i++) { x.fillStyle = 'rgba(220,210,190,0.35)'; x.fillRect(r() * T, T * 0.6 + r() * T * 0.38, 2, 2); }
+    });
+    if (tier === 2) return tile(T, scale, S, (x, T) => { x.fillStyle = '#D9D5CB'; x.fillRect(0, 0, T, T); }, (x, T, r) => {
+      for (let i = 0; i < 420; i++) { const cx = r() * T, cy = r() * T, L = T * (0.025 + r() * 0.05), a = r() * Math.PI; x.save(); x.translate(cx, cy); x.rotate(a); x.fillStyle = r() < 0.5 ? '#F1EEE7' : '#C4BFB3'; x.fillRect(-L / 2, -L * 0.07, L, L * 0.14); x.restore(); }
+    });
+    return tile(T, scale, S, (x, T) => { x.fillStyle = '#E9E1CF'; x.fillRect(0, 0, T, T); }, (x, T, r) => {
+      for (let i = 0; i < 14; i++) { const cx = r() * T, cy = r() * T, a = (r() - 0.5) * 1.4; x.save(); x.translate(cx, cy); x.rotate(a); x.fillStyle = r() < 0.5 ? '#F3ECDD' : '#D9CDB2'; x.fillRect(-T * 0.45, -T * 0.02, T * 0.9, T * 0.04); x.strokeStyle = 'rgba(120,100,70,0.25)'; x.lineWidth = 1; x.beginPath(); x.moveTo(-T * 0.45, 0); x.lineTo(T * 0.45, 0); x.stroke(); x.restore(); }
+    });
+  }
+  // floor
+  if (tier === 1) return tile(T, scale, S, (x, T) => {
+    const n = 5, ph = T / n, r = rng(S);
+    for (let p = 0; p < n; p++) {
+      const y0 = p * ph, col = shade(B, (r() - 0.5) * 0.22);
+      x.fillStyle = rgbStr(col); x.fillRect(0, y0, T, ph);
+      x.save(); x.beginPath(); x.rect(0, y0, T, ph); x.clip();
+      x.strokeStyle = rgbStr(shade(col, -0.22), 0.55); x.lineWidth = Math.max(1, T / 500);
+      for (let g = 0; g < 12; g++) { const yy = y0 + r() * ph, amp = 2 + r() * 5, k = 1 + (r() * 3 | 0), o = r() * 6; x.beginPath(); for (let xx = 0; xx <= T; xx += 6) { const v = yy + Math.sin(xx / T * Math.PI * 2 * k + o) * amp; xx ? x.lineTo(xx, v) : x.moveTo(xx, v); } x.stroke(); }
+      const jx = T * (0.15 + r() * 0.7); x.fillStyle = '#3B2716'; x.fillRect(jx, y0, T * 0.006, ph);
+      x.restore();
+      x.fillStyle = '#3B2716'; x.fillRect(0, y0 + ph - T * 0.005, T, T * 0.01);
+      for (let d = 0; d < 10; d++) { x.fillStyle = 'rgba(230,220,200,0.7)'; x.fillRect(r() * T, y0 + ph - T * 0.004, 2, 2); }
+    }
+    x.fillStyle = '#3B2716'; x.fillRect(0, 0, T, T * 0.005);
+  });
+  if (tier === 2) return tile(T, scale, S, (x, T) => {
+    x.fillStyle = rgbStr(shade(B, -0.35)); x.fillRect(0, 0, T, T);
+    const cols = 7, rows = 16, cw = T / cols, chh = T / rows;
+    for (let row = -1; row <= rows; row++) for (let col = -1; col <= cols; col++) {
+      const wc = ((col % cols) + cols) % cols, wr = ((row % rows) + rows) % rows;
+      const cx = col * cw + (wr % 2) * cw / 2 + (h01(wr, wc) - 0.5) * cw * 0.08, cy = row * chh;
+      x.fillStyle = rgbStr(shade(B, 0.15 + (h01(wc, wr) - 0.5) * 0.1)); x.beginPath(); x.roundRect(cx + 3, cy + 2, cw - 6, chh - 4, 4); x.fill();
+    }
+  });
+  return tile(T, scale, S, (x, T) => {
+    x.fillStyle = rgbStr(shade(B, -0.3)); x.fillRect(0, 0, T, T);
+    const cols = 3, rows = 4, cw = T / cols, chh = T / rows;
+    for (let row = -1; row <= rows; row++) for (let col = -1; col <= cols; col++) {
+      const wc = ((col % cols) + cols) % cols, wr = ((row % rows) + rows) % rows, cx = col * cw + (wr % 2) * cw / 2, cy = row * chh;
+      x.fillStyle = rgbStr(shade(B, 0.28)); x.beginPath(); x.roundRect(cx + 8, cy + 8, cw - 16, chh - 16, 12); x.fill();
+      x.fillStyle = rgbStr(shade(B, -0.05)); for (let p = 0; p < 6; p++) { x.beginPath(); x.arc(cx + 20 + h01(wr * 10 + p, wc) * (cw - 40), cy + 20 + h01(wc * 10 + p, wr) * (chh - 40), T * 0.008, 0, 7); x.fill(); }
+    }
+  });
+}
+
+// ---------- sample surfaces (seamless, used when no camera) ----------
 const SAMPLE_COLOR = { carpet: [150, 138, 122], wall: [232, 228, 220], floor: [176, 124, 80] };
 function makeSample(biome, color, seed = 3) {
   const W = 800, H = 600, c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d'); const r = rng(seed);
   const B = color || SAMPLE_COLOR[biome];
   if (biome === 'carpet') {
     x.fillStyle = rgbStr(shade(B, -0.2)); x.fillRect(0, 0, W, H);
-    for (let i = 0; i < 26000; i++) { const px = r() * W, py = r() * H, a = r() * Math.PI * 2, l = 3 + r() * 6; x.strokeStyle = rgbStr(shade(B, (r() - 0.5) * 0.5)); x.lineWidth = 1 + r() * 1.5; x.beginPath(); x.moveTo(px, py); x.lineTo(px + Math.cos(a) * l, py + Math.sin(a) * l); x.stroke(); }
+    for (let i = 0; i < 26000; i++) {
+      const px = r() * W, py = r() * H, a = r() * Math.PI * 2, l = 3 + r() * 6;
+      x.strokeStyle = rgbStr(shade(B, (r() - 0.5) * 0.5)); x.lineWidth = 1 + r() * 1.5;
+      const ox = [0], oy = [0]; if (px < 12) ox.push(W); if (px > W - 12) ox.push(-W); if (py < 12) oy.push(H); if (py > H - 12) oy.push(-H);
+      for (const dx of ox) for (const dy of oy) { x.beginPath(); x.moveTo(px + dx, py + dy); x.lineTo(px + dx + Math.cos(a) * l, py + dy + Math.sin(a) * l); x.stroke(); }
+    }
   } else if (biome === 'wall') {
     x.fillStyle = rgbStr(B); x.fillRect(0, 0, W, H);
     for (let i = 0; i < 9000; i++) { x.fillStyle = r() < 0.5 ? 'rgba(0,0,0,0.025)' : 'rgba(255,255,255,0.05)'; x.fillRect(r() * W, r() * H, 2, 2); }
   } else {
-    const ph = 110;
-    for (let p = 0; p * ph < H + ph; p++) {
+    const ph = 100;
+    for (let p = 0; p < H / ph; p++) {
       const col = shade(B, (r() - 0.5) * 0.2); x.fillStyle = rgbStr(col); x.fillRect(0, p * ph, W, ph);
+      x.save(); x.beginPath(); x.rect(0, p * ph, W, ph); x.clip();
       x.strokeStyle = rgbStr(shade(col, -0.25), 0.5); x.lineWidth = 1.5;
-      for (let g = 0; g < 22; g++) { const yy = p * ph + r() * ph, amp = 1 + r() * 4, o = r() * 6; x.beginPath(); for (let xx = 0; xx <= W; xx += 10) { const v = yy + Math.sin(xx / 60 + o) * amp; xx ? x.lineTo(xx, v) : x.moveTo(xx, v); } x.stroke(); }
+      for (let g = 0; g < 22; g++) { const yy = p * ph + r() * ph, amp = 1 + r() * 4, k = 1 + (r() * 4 | 0), o = r() * 6; x.beginPath(); for (let xx = 0; xx <= W; xx += 10) { const v = yy + Math.sin(xx / W * Math.PI * 2 * k + o) * amp; xx ? x.lineTo(xx, v) : x.moveTo(xx, v); } x.stroke(); }
+      x.fillStyle = 'rgba(40,25,12,0.8)'; x.fillRect(20 + r() * (W - 40), p * ph, 3, ph);
+      x.restore();
       x.fillStyle = 'rgba(40,25,12,0.8)'; x.fillRect(0, p * ph + ph - 2, W, 3);
-      const sx = (r() * W) | 0; x.fillRect(sx, p * ph, 3, ph);
     }
   }
   return c;

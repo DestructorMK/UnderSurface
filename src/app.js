@@ -34,7 +34,10 @@ let site = null, tier = 1, viewOffset = 0, agents = [], bg = null, lens = { x: 0
 let pendingScan = null;
 
 function currentDay(s) { return Math.min(MAX_DAY, s.anchorDay + Math.floor((Date.now() - s.anchorReal) * SPEED / MS_SIM_DAY)); }
-function viewDay() { const n = currentDay(site); return clamp(n + viewOffset, 0, n + FORECAST); }
+let playing = false; const PLAY_RATE = 3.5;   // simulated days per second during a time-lapse
+function viewDayF() { const n = currentDay(site); return clamp(n + viewOffset, 0, n + FORECAST); }
+function viewDay() { return Math.round(viewDayF()); }
+const isToday = () => Math.round(viewOffset) === 0;
 
 function show(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
@@ -116,12 +119,14 @@ function mysterySite() {
 }
 
 async function openSite(s) {
-  site = s; tier = 1; viewOffset = 0; agents = []; _cut = {};
+  site = s; tier = 1; viewOffset = 0; agents = []; _cut = {}; off.x = off.y = 0; zoom = 1; playing = false; trans = null; prevG = null;
   if (s.source === 'camera' && await startCamera()) bg = { kind: 'camera' };
   else { stopCamera(); bg = { kind: 'sample', canvas: makeSample(s.sampleBiome || s.biome, s.source === 'camera' ? s.color : null, s.sampleSeed || s.seed % 1000) }; }
   show('xray'); renderXray(); setTab('measure');
   $('bCase').style.display = s.mystery ? '' : 'none';
   log('site_open', { site: s.id, biome: s.biome, day: currentDay(s) });
+  store.hints = (store.hints || 0) + 1; save();
+  if (store.hints <= 3 && !(s.mystery && !(store.cases[s.mystery] || {}).briefed)) setTimeout(() => toast(bg.kind === 'camera' ? 'Move slowly to explore the surface. Drag the circle, pinch to zoom.' : 'Drag the circle to explore. Drag outside it to slide the surface. Pinch or scroll to zoom.'), 600);
   if (s.mystery && !(store.cases[s.mystery] || {}).briefed) { caseBrief(); store.cases[s.mystery] = { ...(store.cases[s.mystery] || {}), briefed: true }; save(); }
 }
 
@@ -181,7 +186,6 @@ function renderXray() {
   $('readout').innerHTML = 'Take readings on different days, then graph them.';
   updateTimeUI(true);
 }
-function setTier(t) { t = clamp(t, 1, 3); if (t === tier) return; tier = t; agents = []; $('rail').querySelectorAll('[data-t]').forEach(b => b.classList.toggle('on', +b.dataset.t === t)); log('tier', { site: site.id, tier: t }); }
 function setTab(name) {
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
   document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.id === 'p-' + name));
@@ -192,30 +196,32 @@ document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { setTa
 let lastLabel = '';
 function updateTimeUI(force) {
   if (!site) return;
-  const now = currentDay(site), vd = viewDay();
-  const sub = viewOffset === 0 ? `Today · ${dayLabel(now)}` : `${viewOffset > 0 ? 'Forecast' : 'Looking back'} · ${dayLabel(vd)}`;
+  const now = currentDay(site), vd = viewDay(), o = vd - now;
+  const sub = (o === 0 ? `Today · ${dayLabel(now)}` : `${o > 0 ? 'Forecast' : 'Looking back'} · ${dayLabel(vd)}`) + (playing ? ' ' : '');
   if (sub !== lastLabel || force) {
-    lastLabel = sub; $('xSub').textContent = sub;
-    const sc = $('scrub'); sc.max = now + FORECAST; sc.value = vd; $('maxL').textContent = `+${FORECAST / 7} wk`;
-    $('timeLabel').innerHTML = viewOffset === 0 ? `<b>Today</b> · ${dayLabel(now)}` : `<b>${viewOffset > 0 ? 'Forecast' : 'Past'}</b> · ${dayLabel(vd)} <span class="caps">(${viewOffset > 0 ? '+' : ''}${viewOffset} days)</span>`;
-    $('bNow').disabled = viewOffset === 0; $('bCommit').disabled = viewOffset <= 0;
+    lastLabel = sub; $('xSub').textContent = sub.trim();
+    const sc = $('scrub'); sc.max = now + FORECAST; if (!scrubbing) sc.value = vd; $('maxL').textContent = `+${FORECAST / 7} wk`;
+    $('timeLabel').innerHTML = o === 0 ? `<b>Today</b> · ${dayLabel(now)}` : `<b>${o > 0 ? 'Forecast' : 'Past'}</b> · ${dayLabel(vd)} <span class="caps">(${o > 0 ? '+' : ''}${o} days)</span>`;
+    $('bNow').disabled = o === 0 && !playing;
+    $('bPlay').textContent = playing ? 'Pause' : vd >= now + FORECAST ? 'Replay' : 'Play';
     const max = now + FORECAST, pct = v => (v / max * 100).toFixed(2) + '%';
     $('ticks').innerHTML = `<i class="now" style="left:${pct(now)}"></i>` + site.events.filter(e => !e.hidden).map(e => `<i class="ev" style="left:${pct(e.day)}" title="${e.type}"></i>`).join('');
-    $('acts').querySelectorAll('button').forEach(b => b.disabled = viewOffset !== 0);
-    $('actNote').textContent = viewOffset !== 0 ? 'You can only change the ecosystem today. Return to today to act.' : 'Each action happens today. Then use Time to watch what follows.';
+    $('acts').querySelectorAll('button').forEach(b => b.disabled = o !== 0);
+    $('actNote').textContent = o !== 0 ? 'You can only change the ecosystem today. Return to today to act.' : 'Each action happens today. Then press Play in Time to watch what follows.';
   }
 }
-$('scrub').oninput = e => { viewOffset = +e.target.value - currentDay(site); updateTimeUI(true); };
-$('scrub').onchange = () => log('scrub', { site: site.id, offset: viewOffset });
-$('bNow').onclick = () => { viewOffset = 0; updateTimeUI(true); };
-$('bCommit').onclick = () => {
-  if (viewOffset <= 0) return; const to = viewDay();
-  log('time_skip', { site: site.id, from: currentDay(site), to });
-  site.anchorDay = to; site.anchorReal = Date.now(); viewOffset = 0; save(); updateTimeUI(true); toast(`Skipped ahead to ${dayLabel(to)}`);
+let scrubbing = false;
+$('scrub').oninput = e => { scrubbing = true; playing = false; viewOffset = +e.target.value - currentDay(site); updateTimeUI(true); };
+$('scrub').onchange = () => { scrubbing = false; log('scrub', { site: site.id, offset: Math.round(viewOffset) }); };
+$('bNow').onclick = () => { playing = false; viewOffset = 0; updateTimeUI(true); };
+$('bPlay').onclick = () => {
+  if (playing) { playing = false; log('timelapse_pause', { site: site.id, day: viewDay() }); }
+  else { if (viewDay() >= currentDay(site) + FORECAST) viewOffset = -currentDay(site); playing = true; log('timelapse_play', { site: site.id, from: viewDay() }); }
+  updateTimeUI(true);
 };
 
 function act(type) {
-  if (viewOffset !== 0) return;
+  if (!isToday()) return;
   const now = currentDay(site);
   if (site.events.some(e => e.day === now && e.type === type)) { toast('Already done today. Let some time pass first.'); return; }
   site.events.push({ day: now, type }); save(); updateTimeUI(true);
@@ -229,6 +235,7 @@ function addReading(r) {
 }
 document.querySelectorAll('[data-m]').forEach(b => b.onclick = () => measure(b.dataset.m));
 function measure(kind) {
+  playing = false;
   const vd = viewDay(), st = stateAt(site, vd), nz = k => noise(site.seed + 99, vd, k);
   if (kind === 'rh') { const v = Math.round(st.env.rh + nz(1) * 1.5); addReading({ day: vd, kind, value: v }); $('readout').innerHTML = `Humidity <b class="num">${v}%</b> · ${dayLabel(vd)}`; log('measure', { site: site.id, kind, day: vd, value: v }); }
   if (kind === 'temp') { const v = +(st.env.temp + nz(2) * 0.3).toFixed(1); addReading({ day: vd, kind, value: v }); $('readout').innerHTML = `Temperature <b class="num">${v} °C</b> · ${dayLabel(vd)}`; log('measure', { site: site.id, kind, day: vd, value: v }); }
@@ -236,7 +243,7 @@ function measure(kind) {
     const here = Object.keys(st.pops).filter(s => SPECIES[s].tier === tier);
     if (!here.length) { $('readout').textContent = 'Nothing to count at this magnification. Try another lens.'; return; }
     const parts = here.map(s => {
-      const seen = agents.filter(a => a.s === s && !a.speck).length, est = Math.round(st.pops[s] * (1 + nz(s.length) * 0.08));
+      const seen = inLensAgents().filter(a => a.s === s && !a.speck).length, est = Math.round(st.pops[s] * (1 + nz(s.length) * 0.08));
       addReading({ day: vd, kind: 'pop', species: s, value: est });
       const nm = store.guide[s] ? SPECIES[s].name.toLowerCase() : spName(s);
       return `<b class="num">${est}</b> ${nm}${SPECIES[s].colony ? ' (colony units)' : ''} <span class="caps">${seen} in view</span>`;
@@ -361,9 +368,15 @@ $('bReset').onclick = () => sheet(`<div class="sheet-h"><h2>Erase everything?</h
 });
 $('bDev').onclick = () => { store.sites.forEach(s => s.anchorReal -= 86400000); save(); renderHome(); toast('Moved every site 1 real day (1 simulated week) forward'); };
 
-// ---------- stage: layout, input, rendering ----------
+// ---------- stage: world-anchored x-ray, camera tracking, continuous zoom ----------
 const stage = $('stage'), ctx = stage.getContext('2d');
 let W = 0, H = 0, DPR = 1, area = { t: 0, b: 0 };
+const off = { x: 0, y: 0 };          // how far the real surface has moved on screen (camera tracking, or panning a sample)
+let zoom = 1, trans = null, lastZoomInput = 0;
+const MULT = [0, 1, 1.8, 3];         // magnified layers slide faster than the surface, like a real lens
+const TILE = () => Math.round(lens.R * 3);
+const wrapd = (v, T) => ((v % T) + 1.5 * T) % T - T / 2;
+
 function layout() {
   DPR = Math.min(2, window.devicePixelRatio || 1); W = innerWidth; H = innerHeight;
   if (stage.width !== Math.round(W * DPR) || stage.height !== Math.round(H * DPR)) { stage.width = Math.round(W * DPR); stage.height = Math.round(H * DPR); }
@@ -372,55 +385,134 @@ function layout() {
     area = { t: top, b: H - bot };
     const ah = area.b - area.t, railW = 88;
     const R = Math.round(Math.max(90, W < 600 ? Math.min(W * 0.44, ah * 0.42) : Math.min((W - railW * 2) * 0.5, ah * 0.44, 340)));
-    if (R !== lens.R) { lens.R = R; _cut = {}; agents.forEach(a => a.size = sizeFor(a)); }
+    if (R !== lens.R) { lens.R = R; _cut = {}; agents = []; }
     if (!lens.placed) { lens.x = W / 2; lens.y = area.t + ah / 2; }
     clampLens();
     $('rail').style.top = (top + 12) + 'px';
   }
 }
-function clampLens() { lens.x = clamp(lens.x, lens.R * 0.6, W - lens.R * 0.6); lens.y = clamp(lens.y, area.t + lens.R * 0.6, area.b - lens.R * 0.6); }
+function clampLens() { lens.x = clamp(lens.x, lens.R * 0.5, W - lens.R * 0.5); lens.y = clamp(lens.y, area.t + lens.R * 0.5, area.b - lens.R * 0.5); }
 addEventListener('resize', layout);
+const lensWorld = () => ({ x: lens.x - off.x * MULT[tier], y: lens.y - off.y * MULT[tier] });
+function localOf(a, lw, T) { return { x: wrapd(a.wx - lw.x, T), y: wrapd(a.wy - lw.y, T) }; }
+function inLensAgents() { const T = TILE(), lw = lensWorld(), half = lens.R / zoom; return agents.filter(a => { if (a.dying) return false; const p = localOf(a, lw, T); return p.x * p.x + p.y * p.y < half * half; }); }
 
-const ptrs = new Map(); let drag = null, pinch = null, lastWheel = 0;
+// ---- tier changes: snapshot the old view and zoom through it ----
+function snapshot() {
+  const R = lens.R, c = document.createElement('canvas'); c.width = c.height = Math.round(2 * R * DPR);
+  try { c.getContext('2d').drawImage(stage, (lens.x - R) * DPR, (lens.y - R) * DPR, 2 * R * DPR, 2 * R * DPR, 0, 0, c.width, c.height); } catch (e) {}
+  return c;
+}
+function setTier(t, via) {
+  t = clamp(t, 1, 3); if (t === tier || !site) return;
+  const dir = t > tier ? 1 : -1;
+  if (mode === 'xray') trans = { img: snapshot(), t: 0, dir };
+  tier = t; agents = [];
+  if (via !== 'pinch') zoom = dir > 0 ? 0.62 : 1.5;
+  $('rail').querySelectorAll('[data-t]').forEach(b => b.classList.toggle('on', +b.dataset.t === t));
+  log('tier', { site: site.id, tier: t, via: via || 'rail' });
+}
+function applyZoom(z, via) {
+  if (z > 1.6 && tier < 3) { setTier(tier + 1, via); z /= 1.6; }
+  else if (z < 0.62 && tier > 1) { setTier(tier - 1, via); z *= 1.6; }
+  zoom = clamp(z, tier === 1 ? 0.75 : 0.5, tier === 3 ? 1.5 : 2);
+  lastZoomInput = performance.now();
+  return zoom;
+}
+
+// ---- input ----
+const ptrs = new Map(); let drag = null, pinch = null;
+['gesturestart', 'gesturechange', 'gestureend'].forEach(ev => document.addEventListener(ev, e => e.preventDefault()));
+stage.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 stage.addEventListener('pointerdown', e => {
-  stage.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  try { stage.setPointerCapture(e.pointerId); } catch (_) {}
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (mode !== 'xray') return;
-  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) }; drag = null; return; }
-  drag = { x0: e.clientX, y0: e.clientY, ox: lens.x - e.clientX, oy: lens.y - e.clientY, inLens: Math.hypot(e.clientX - lens.x, e.clientY - lens.y) < lens.R, moved: false };
+  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, base: zoom }; drag = null; return; }
+  const inLens = Math.hypot(e.clientX - lens.x, e.clientY - lens.y) < lens.R;
+  drag = { x0: e.clientX, y0: e.clientY, lx: e.clientX, ly: e.clientY, ox: lens.x - e.clientX, oy: lens.y - e.clientY, kind: inLens ? 'lens' : bg && bg.kind === 'sample' ? 'pan' : 'follow', moved: false };
 });
 stage.addEventListener('pointermove', e => {
   if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (pinch && ptrs.size === 2) {
-    const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y), r = d / pinch.d0;
-    if (r > 1.35) { setTier(tier + 1); pinch.d0 = d; } else if (r < 0.74) { setTier(tier - 1); pinch.d0 = d; }
+  if (pinch && ptrs.size >= 2) {
+    const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y), z = pinch.base * d / pinch.d0, nz = applyZoom(z, 'pinch');
+    if (Math.abs(nz - z) > 1e-6) { pinch.base = nz; pinch.d0 = d; }
     return;
   }
-  if (drag) {
-    if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 8) drag.moved = true;
-    if (drag.moved && drag.inLens) { lens.x = e.clientX + drag.ox; lens.y = e.clientY + drag.oy; lens.placed = true; clampLens(); }
+  if (!drag) return;
+  if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 8) drag.moved = true;
+  if (drag.moved) {
+    if (drag.kind === 'lens') { lens.x = e.clientX + drag.ox; lens.y = e.clientY + drag.oy; }
+    else if (drag.kind === 'follow') { lens.x = e.clientX; lens.y = e.clientY; }
+    else { off.x += e.clientX - drag.lx; off.y += e.clientY - drag.ly; }
+    if (drag.kind !== 'pan') { lens.placed = true; clampLens(); }
   }
+  drag.lx = e.clientX; drag.ly = e.clientY;
 });
 function endPtr(e) {
   if (drag && !drag.moved && ptrs.size === 1 && mode === 'xray') tap(e.clientX, e.clientY);
-  if (drag && drag.moved && drag.inLens) log('lens_move', {});
+  if (drag && drag.moved) log(drag.kind === 'pan' ? 'surface_pan' : 'lens_move', {});
+  if (pinch && ptrs.size <= 2) log('pinch', { tier, zoom: +zoom.toFixed(2) });
   ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (!ptrs.size) drag = null;
 }
 stage.addEventListener('pointerup', endPtr); stage.addEventListener('pointercancel', endPtr);
-stage.addEventListener('wheel', e => { e.preventDefault(); if (mode !== 'xray' || performance.now() - lastWheel < 350 || Math.abs(e.deltaY) < 4) return; lastWheel = performance.now(); setTier(tier + (e.deltaY < 0 ? 1 : -1)); }, { passive: false });
+let lastWheel = 0;
+stage.addEventListener('wheel', e => {
+  e.preventDefault(); if (mode !== 'xray') return;
+  if (e.ctrlKey) { applyZoom(zoom * Math.exp(-e.deltaY * 0.01), 'trackpad'); return; }   // trackpad pinch
+  if (performance.now() - lastWheel < 350 || Math.abs(e.deltaY) < 4) return; lastWheel = performance.now(); setTier(tier + (e.deltaY < 0 ? 1 : -1), 'wheel');
+}, { passive: false });
 
 function tap(x, y) {
-  if (Math.hypot(x - lens.x, y - lens.y) > lens.R) { lens.x = x; lens.y = y; lens.placed = true; clampLens(); return; }
-  let best = null, bd = 1e9;
+  if (Math.hypot(x - lens.x, y - lens.y) > lens.R) { lens.x = x; lens.y = y; lens.placed = true; clampLens(); log('lens_move', { via: 'tap' }); return; }
+  const T = TILE(), lw = lensWorld(); let best = null, bd = 1e9;
   for (const a of agents) {
-    const ax = lens.x + a.u * lens.R, ay = lens.y + a.v * lens.R, d = Math.hypot(x - ax, y - ay);
-    const hit = a.speck ? 22 : Math.max(26, a.size * (SPECIES[a.s].colony ? 0.4 : 0.6));
+    if (a.dying) continue;
+    const p = localOf(a, lw, T), ax = lens.x + p.x * zoom, ay = lens.y + p.y * zoom, d = Math.hypot(x - ax, y - ay);
+    const hit = a.speck ? 22 : Math.max(26, a.size * zoom * (SPECIES[a.s].colony ? 0.4 : 0.6));
     if (d < hit && d < bd) { bd = d; best = a; }
   }
   if (!best) return;
-  if (best.speck) { toast(`Something tiny is here. Zoom in to ${TIERS[SPECIES[best.s].tier].name} ${TIERS[SPECIES[best.s].tier].mag} to see it.`); log('speck_tap', { species: best.s, tier }); return; }
+  if (best.speck) { const sp = SPECIES[best.s]; toast(`Something tiny is here. Zoom in to ${TIERS[sp.tier].name} ${TIERS[sp.tier].mag} to see it.`); log('speck_tap', { species: best.s, tier }); return; }
   spot(best.s);
 }
 
+// ---- camera tracking: global image shift between frames (block matching on a 96x72 grey frame) ----
+const FW = 96, FH = 72, fcv = document.createElement('canvas'); fcv.width = FW; fcv.height = FH;
+const fctx = fcv.getContext('2d', { willReadFrequently: true }); let prevG = null; const track = { ok: false, lost: 0 };
+function grey(d, n) { const g = new Float32Array(n); let m = 0; for (let i = 0; i < n; i++) { g[i] = d[i * 4] * 0.3 + d[i * 4 + 1] * 0.59 + d[i * 4 + 2] * 0.11; m += g[i]; } m /= n; for (let i = 0; i < n; i++) g[i] -= m; return g; }
+function estimateShift(a, b, w, h, S) {          // returns (dx,dy) such that b(p + d) ≈ a(p)
+  const m = S + 2; let v = 0, n = 0;
+  for (let y = m; y < h - m; y += 2) for (let x = m; x < w - m; x += 2) { v += a[y * w + x] * a[y * w + x]; n++; }
+  if (v / n < 25) return null;                        // too little texture to track (e.g. a plain painted wall)
+  const N = 2 * S + 1, cost = new Float32Array(N * N); let best = Infinity, bi = 0, sum = 0;
+  for (let dy = -S; dy <= S; dy++) for (let dx = -S; dx <= S; dx++) {
+    let sad = 0; const o = dy * w + dx;
+    for (let y = m; y < h - m; y += 2) { const r = y * w; for (let x = m; x < w - m; x += 2) { const i = r + x; sad += Math.abs(b[i + o] - a[i]); } }
+    const k = (dy + S) * N + dx + S; cost[k] = sad; sum += sad; if (sad < best) { best = sad; bi = k; }
+  }
+  if (best > 0.8 * sum / (N * N)) return null;        // no clear winner: blur or a repeating pattern
+  const bx = bi % N - S, by = ((bi / N) | 0) - S, c = i => cost[i];
+  const sub = (l, c0, r) => { const den = l - 2 * c0 + r; return den > 0 ? clamp(0.5 * (l - r) / den, -0.5, 0.5) : 0; };
+  const sx = Math.abs(bx) < S ? sub(c(bi - 1), best, c(bi + 1)) : 0, sy = Math.abs(by) < S ? sub(c(bi - N), best, c(bi + N)) : 0;
+  return { dx: bx + sx, dy: by + sy };
+}
+function trackCamera() {
+  if (!bg || bg.kind !== 'camera' || !cam.videoWidth || cam.readyState < 2) { prevG = null; return; }
+  fctx.drawImage(cam, 0, 0, FW, FH);
+  const g = grey(fctx.getImageData(0, 0, FW, FH).data, FW * FH);
+  if (prevG) {
+    const e = estimateShift(prevG, g, FW, FH, 8);
+    if (e) {
+      const k = (cam.videoWidth / FW) * Math.max(W / cam.videoWidth, H / cam.videoHeight);
+      let dx = e.dx * k, dy = e.dy * k; if (Math.hypot(dx, dy) < 0.5) dx = dy = 0;
+      off.x += dx; off.y += dy; track.ok = true; track.lost = 0;
+    } else { track.lost++; if (track.lost > 20) track.ok = false; }
+  }
+  prevG = g;
+}
+
+// ---- agents live in a wrapping world tile (T x T) per magnification ----
 function sizeFor(a) {
   const sp = SPECIES[a.s], R = lens.R;
   if (a.speck) return 2 + (4 - sp.tier) * 0.5;
@@ -428,36 +520,44 @@ function sizeFor(a) {
   return R * (SIZE[a.s] || 0.25) * (0.85 + a.r * 0.3);
 }
 function syncAgents(st) {
+  const T = TILE(), F = T * T / (Math.PI * lens.R * lens.R);
   for (const s in st.pops) {
     const sp = SPECIES[s], pop = st.pops[s];
     let full = 0, specks = 0;
-    if (sp.tier === tier) full = Math.min(sp.colony ? 5 : 14, Math.round(pop / sp.per));
-    else if (sp.tier > tier) specks = Math.min(28, Math.round(pop / sp.per * 1.5));
+    if (sp.tier === tier) full = Math.min(sp.colony ? 14 : 42, Math.round(pop / sp.per * F));
+    else if (sp.tier > tier) specks = Math.min(90, Math.round(pop / sp.per * 1.5 * F));
     for (const [want, speck] of [[full, false], [specks, true]]) {
-      const mine = agents.filter(a => a.s === s && a.speck === speck);
-      for (let i = mine.length; i < want; i++) {
-        const ang = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * 0.8;
-        const a = { s, speck, u: Math.cos(ang) * rr, v: Math.sin(ang) * rr, a: Math.random() * 7, r: Math.random(), seed: (Math.random() * 1e6) | 0, pop, ph: Math.random() * 10 };
+      const alive = agents.filter(a => a.s === s && a.speck === speck && !a.dying);
+      for (let i = alive.length; i < want; i++) {
+        const a = { s, speck, wx: Math.random() * T, wy: Math.random() * T, a: Math.random() * 7, r: Math.random(), seed: (Math.random() * 1e6) | 0, pop, ph: Math.random() * 10, al: agents.length ? 0 : 1, dying: false };
         a.size = sizeFor(a); agents.push(a);
       }
-      if (mine.length > want) { const drop = new Set(mine.slice(want)); agents = agents.filter(a => !drop.has(a)); }
-      if (sp.colony && !speck) mine.slice(0, want).forEach(a => { if (Math.abs(a.pop - pop) > 3) { a.pop = pop; a.size = sizeFor(a); } });
+      for (let i = want; i < alive.length; i++) alive[(Math.random() * alive.length) | 0].dying = true;
+      if (sp.colony && !speck) alive.forEach(a => { if (Math.abs(a.pop - pop) > 1) { a.pop += (pop - a.pop) * 0.2; a.size = sizeFor(a); } });
     }
   }
 }
 let _cut = {};
-function cut() {
-  const D = Math.round(lens.R * 2 * DPR), k = tier + '|' + D;
-  return _cut[k] || (_cut[k] = cutaway(site.biome, tier, D, site.color && !site.mystery ? site.color : SAMPLE_COLOR[site.biome], site.seed));
+function cut(T) {
+  const k = tier + '|' + T;
+  return _cut[k] || (_cut[k] = cutaway(site.biome, tier, T, site.color && !site.mystery ? site.color : SAMPLE_COLOR[site.biome], site.seed, Math.min(DPR, 1.5)));
 }
 function drawCover(src, sw, sh) { const s = Math.max(W / sw, H / sh), w = sw * s, h = sh * s; ctx.drawImage(src, (W - w) / 2, (H - h) / 2, w, h); }
+function drawBg() {
+  const src = bgSource(); if (!src) return;
+  if (bg.kind === 'camera') { drawCover(...src); return; }
+  const [c, sw, sh] = src, s = Math.max(W / sw, H / sh), tw = sw * s, th = sh * s;
+  const x0 = ((off.x % tw) + tw) % tw - tw, y0 = ((off.y % th) + th) % th - th;
+  for (let x = x0; x < W; x += tw) for (let y = y0; y < H; y += th) ctx.drawImage(c, x, y, tw + 1, th + 1);
+}
 
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now; const t = now / 1000;
   if (mode === 'scan' || mode === 'xray') {
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.fillStyle = '#1a1a1a'; ctx.fillRect(0, 0, W, H);
-    const src = bgSource(); if (src) drawCover(...src);
+    if (mode === 'xray') trackCamera();
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalAlpha = 1; ctx.fillStyle = '#1a1a1a'; ctx.fillRect(0, 0, W, H);
+    drawBg();
     if (mode === 'scan') drawReticle();
     if (mode === 'xray' && site) drawXray(t, dt);
   }
@@ -465,40 +565,69 @@ function frame(now) {
 }
 function drawReticle() {
   const s = Math.min(W, H) * 0.5, x = (W - s) / 2, y = (H - s) / 2, L = 28;
-  ctx.fillStyle = 'rgba(17,17,17,0.35)'; ctx.fillRect(0, 0, W, H); ctx.clearRect(x, y, s, s);
-  const src = bgSource(); if (src) { ctx.save(); ctx.beginPath(); ctx.rect(x, y, s, s); ctx.clip(); drawCover(...src); ctx.restore(); }
+  ctx.fillStyle = 'rgba(17,17,17,0.35)'; ctx.fillRect(0, 0, W, H);
+  ctx.save(); ctx.beginPath(); ctx.rect(x, y, s, s); ctx.clip(); drawBg(); ctx.restore();
   ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
   [[x, y, 1, 1], [x + s, y, -1, 1], [x, y + s, 1, -1], [x + s, y + s, -1, -1]].forEach(([cx, cy, dx, dy]) => { ctx.beginPath(); ctx.moveTo(cx + dx * L, cy); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy + dy * L); ctx.stroke(); });
 }
 function drawXray(t, dt) {
+  if (playing) {
+    const n = currentDay(site); viewOffset += dt * PLAY_RATE;
+    if (n + viewOffset >= n + FORECAST) { viewOffset = FORECAST; playing = false; log('timelapse_end', { site: site.id }); }
+  }
   updateTimeUI();
-  const st = stateAt(site, viewDay()); syncAgents(st);
-  const { x, y, R } = lens;
+  if (!pinch && performance.now() - lastZoomInput > 160) zoom += (1 - zoom) * Math.min(1, dt * 9);
+  const st = stateLerp(site, viewDayF()); syncAgents(st);
+  const { x, y, R } = lens, T = TILE(), lw = lensWorld(), z = zoom, half = R / z;
   ctx.fillStyle = 'rgba(17,17,17,0.4)'; ctx.fillRect(0, 0, W, H);
   ctx.save(); ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.clip();
-  ctx.drawImage(cut(), x - R, y - R, R * 2, R * 2);
-  if (st.env.rh > 68) { ctx.fillStyle = `rgba(56,104,150,${Math.min(0.28, (st.env.rh - 68) / 110)})`; ctx.fillRect(x - R, y - R, R * 2, R * 2); }
+  ctx.translate(x, y); ctx.scale(z, z);
+  const tl = cut(T);
+  for (let kx = Math.floor((lw.x - half) / T); kx <= Math.floor((lw.x + half) / T); kx++)
+    for (let ky = Math.floor((lw.y - half) / T); ky <= Math.floor((lw.y + half) / T); ky++) ctx.drawImage(tl, kx * T - lw.x, ky * T - lw.y, T + 0.5, T + 0.5);
+  if (st.env.rh > 68) { ctx.fillStyle = `rgba(56,104,150,${Math.min(0.28, (st.env.rh - 68) / 110)})`; ctx.fillRect(-half, -half, half * 2, half * 2); }
+  if (st.env.rh < 45) { ctx.fillStyle = `rgba(198,160,104,${Math.min(0.22, (45 - st.env.rh) / 80)})`; ctx.fillRect(-half, -half, half * 2, half * 2); }
   const order = a => a.speck ? 1 : SPECIES[a.s].colony ? 0 : 2;
   agents.sort((p, q) => order(p) - order(q));
+  const v0 = 1.4 * R;
   for (const a of agents) {
     const sp = SPECIES[a.s];
-    if (sp.speed && !a.speck) {
-      a.a += (Math.random() - 0.5) * 3 * dt; const v = sp.speed * 1.4;
-      a.u += Math.cos(a.a) * v * dt; a.v += Math.sin(a.a) * v * dt;
-      if (a.u * a.u + a.v * a.v > 0.72) a.a = Math.atan2(-a.v, -a.u) + (Math.random() - 0.5);
-    } else if (a.speck) { a.u += (Math.random() - 0.5) * 0.004; a.v += (Math.random() - 0.5) * 0.004; if (a.u * a.u + a.v * a.v > 0.85) { a.u *= 0.95; a.v *= 0.95; } }
-    const px = x + a.u * R, py = y + a.v * R;
-    if (a.speck) { ctx.fillStyle = sp.ink; ctx.globalAlpha = 0.75; ctx.beginPath(); ctx.arc(px, py, a.size, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }
-    else drawOrganism(ctx, a.s, px, py, a.size, sp.colony ? a.r * 6 : a.a, t + a.ph, { seed: a.seed });
+    a.al = a.dying ? a.al - dt * 2.5 : Math.min(1, a.al + dt * 2.5);
+    if (sp.speed && !a.speck) { a.a += (Math.random() - 0.5) * 3 * dt; a.wx += Math.cos(a.a) * sp.speed * v0 * dt; a.wy += Math.sin(a.a) * sp.speed * v0 * dt; }
+    else if (a.speck) { a.wx += (Math.random() - 0.5) * 0.6; a.wy += (Math.random() - 0.5) * 0.6; }
+    a.wx = ((a.wx % T) + T) % T; a.wy = ((a.wy % T) + T) % T;
+    const p = localOf(a, lw, T), m = half + a.size;
+    if (Math.abs(p.x) > m || Math.abs(p.y) > m || a.al <= 0) continue;
+    ctx.globalAlpha = Math.max(0, a.al);
+    if (a.speck) { ctx.fillStyle = sp.ink; ctx.globalAlpha *= 0.75; ctx.beginPath(); ctx.arc(p.x, p.y, a.size / z, 0, 7); ctx.fill(); }
+    else drawOrganism(ctx, a.s, p.x, p.y, a.size, sp.colony ? a.r * 6 : a.a, t + a.ph, { seed: a.seed });
   }
-  ctx.restore();
+  agents = agents.filter(a => !(a.dying && a.al <= 0));
+  ctx.restore(); ctx.globalAlpha = 1;
+  if (trans) {
+    trans.t += dt / 0.35;
+    if (trans.t >= 1) trans = null;
+    else { ctx.save(); ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.clip(); ctx.globalAlpha = 1 - trans.t; const s = trans.dir > 0 ? 1 + trans.t * 0.9 : 1 - trans.t * 0.4; ctx.translate(x, y); ctx.scale(s, s); ctx.drawImage(trans.img, -R, -R, R * 2, R * 2); ctx.restore(); ctx.globalAlpha = 1; }
+  }
+  // ring, ticks and a grip that says "drag me"
   ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.stroke();
   for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * (R - 10), y + Math.sin(a) * (R - 10)); ctx.lineTo(x + Math.cos(a) * R, y + Math.sin(a) * R); ctx.stroke(); }
-  // scale bar, fixed top-left like microscope software
-  const bw = R * 0.45, bx = 20, by = area.t + 26;
+  const ga = Math.PI * 0.25, gx = x + Math.cos(ga) * R, gy = y + Math.sin(ga) * R;
+  ctx.fillStyle = '#F7F7F5'; ctx.beginPath(); ctx.arc(gx, gy, 9, 0, 7); ctx.fill(); ctx.strokeStyle = '#111'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.strokeStyle = '#111'; ctx.beginPath(); ctx.moveTo(gx - 4, gy - 2); ctx.lineTo(gx + 4, gy - 2); ctx.moveTo(gx - 4, gy + 2); ctx.lineTo(gx + 4, gy + 2); ctx.stroke();
+  // scale bar + status, fixed top-left like microscope software
+  const bw = R * 0.45 * z, bx = 20, by = area.t + 26;
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + bw, by); ctx.moveTo(bx, by - 5); ctx.lineTo(bx, by + 5); ctx.moveTo(bx + bw, by - 5); ctx.lineTo(bx + bw, by + 5); ctx.stroke();
   ctx.fillStyle = '#fff'; ctx.font = '12px "Helvetica Neue", Helvetica, Arial, sans-serif'; ctx.textAlign = 'left';
   ctx.fillText(W < 600 ? TIERS[tier].bar : `${TIERS[tier].bar}  ·  ${TIERS[tier].name} ${TIERS[tier].mag}`, bx, by + 20);
+  if (bg.kind === 'camera' && !track.ok) { ctx.fillStyle = '#fff'; ctx.fillText('Not tracking: move slowly over a textured spot', bx, by + 38); }
+  if (Math.round(viewOffset) !== 0 || playing) {
+    const label = `${viewOffset > 0 ? 'Forecast' : 'Looking back'} · ${dayLabel(viewDay())}`;
+    ctx.font = 'bold 14px "Helvetica Neue", Helvetica, Arial, sans-serif'; ctx.textAlign = 'center';
+    const ly = y - R - 14 > area.t + 60 ? y - R - 14 : y + R + 24;
+    ctx.fillStyle = '#fff'; ctx.fillText(label, x, ly);
+  }
 }
 
 // ---------- boot ----------

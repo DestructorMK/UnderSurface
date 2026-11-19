@@ -115,6 +115,11 @@ function historyFor(site, toDay) {
   }
   return c.states;
 }
+function stateLerp(site, dayF) {
+  const d0 = Math.max(0, Math.floor(dayF)), f = Math.max(0, dayF - d0), a = stateAt(site, d0); if (f < 0.01) return a;
+  const b = stateAt(site, d0 + 1), pops = {}; for (const k in a.pops) pops[k] = a.pops[k] + (b.pops[k] - a.pops[k]) * f;
+  return { pops, env: { rh: a.env.rh + (b.env.rh - a.env.rh) * f, temp: a.env.temp + (b.env.temp - a.env.temp) * f, food: a.env.food } };
+}
 function stateAt(site, day) { day = Math.max(0, Math.round(day)); return historyFor(site, day)[day]; }
 
 if (typeof module !== 'undefined') module.exports = { SPECIES, BIOMES, ACTIONS, PREDATOR_FOR, envAt, stateAt, historyFor };
