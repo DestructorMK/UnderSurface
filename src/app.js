@@ -354,11 +354,11 @@ function claimSheet() {
 
 // ---------- research log ----------
 $('bLog').onclick = () => {
-  sheet(`<div class="sheet-h"><div><div class="caps">NC State research</div><h2>Research log</h2></div><button class="btn quiet" data-close>Done</button></div>
+  sheet(`<div class="sheet-h"><div><div class="caps">Research</div><h2>Research log</h2></div><button class="btn quiet" data-close>Done</button></div>
     <p>This device has logged <b class="num">${store.log.length}</b> events. Each event records what was tapped, measured or changed, with a time, a random install ID and a random session ID.</p>
     <p>No names, photos or camera images are stored or sent anywhere. The log stays on this device until you download it.</p>
     <div class="tools"><button class="btn primary" id="bDl">Download JSON</button><button class="btn" id="bCopy">Copy</button></div>`, () => {
-    const data = () => JSON.stringify({ app: 'undersurface', version: '0.1', exported: new Date().toISOString(), install: store.install, events: store.log }, null, 1);
+    const data = () => JSON.stringify({ app: 'undersurface', version: '0.2', exported: new Date().toISOString(), install: store.install, events: store.log }, null, 1);
     $('bDl').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data()], { type: 'application/json' })); a.download = `undersurface-log-${store.install}-${new Date().toISOString().slice(0, 10)}.json`; document.body.appendChild(a); a.click(); a.remove(); };
     $('bCopy').onclick = async () => { try { await navigator.clipboard.writeText(data()); toast('Log copied'); } catch (e) { toast('Copy not allowed here. Use Download.'); } };
   });
